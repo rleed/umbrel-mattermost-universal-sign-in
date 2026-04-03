@@ -1,7 +1,5 @@
 FROM node:20-alpine
-RUN groupadd -g 1000 appuser && \
-    useradd -r -u 1000 -g appuser appuser
-USER appuser
+USER node
 WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm ci --only=production
