@@ -107,7 +107,6 @@ function loginMattermost(res, domain, id) {
       a = a.split('').map(c => String.fromCharCode(c.charCodeAt(0) + (/\d/.test(c)? 97-48: 10))).join('')
       const shortcode = a
 
-    console.log(`${opts.mattermost}/api/v4/users/email/${shortcode}@satoshidnc.com`, JSON.stringify(get_options))
     fetch(`${opts.mattermost}/api/v4/users/email/${shortcode}@satoshidnc.com`, get_options).then(r => r.json()).then(json => {
       if (json.status_code == 404) {
 
