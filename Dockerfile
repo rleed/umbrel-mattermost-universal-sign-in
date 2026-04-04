@@ -1,5 +1,4 @@
 FROM node:20-alpine
-RUN mkdir -p /data && chown -R 1000:1000 /data
 USER node
 WORKDIR /usr/src/app
 COPY package*.json ./
