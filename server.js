@@ -377,6 +377,8 @@ app.get(opts.route, function (req, res) {
 // intended as admin panel behind umbrel login
 app.get(`${opts.admin}`, function (req, res) {
 
+  const domain = req.get('host')
+
   // tablulate results
   let users = undefined
   const getResults = () => {
