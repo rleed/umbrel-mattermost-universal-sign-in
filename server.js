@@ -18,6 +18,11 @@ const options = {
     short: 'p',
     default: '8066',
   },
+  datapath: {
+    type: 'string',
+    short: 'd',
+    default: '',
+  },
   mattermost: {
     type: 'string',
     short: 'i',
@@ -53,10 +58,10 @@ const { values: opts, positionals: args } = parseArgs({
   allowPositionals: true,
 })
 
-const adapter1 = new JSONFile('users.json')
+const adapter1 = new JSONFile(`${opts.datapath}users.json`)
 const db = new Low(adapter1, {})
 db.read()
-const adapter2 = new JSONFile('activity.json')
+const adapter2 = new JSONFile(`${opts.datapath}activity.json`)
 const activity = new Low(adapter2, [])
 activity.read()
 
