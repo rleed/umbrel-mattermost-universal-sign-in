@@ -441,7 +441,11 @@ app.get(`${opts.admin}`, function (req, res) {
 
 // handles ancillary files (styles, etc.) when serving for a local umbrel instance
 app.get('/:path*', (req, res) => {
-  res.redirect(url.replace(`${req.protocol}://${req.hostname}:8765/${req.params.path}`))
+  if (req.get('host').endsWith(':8766')) {
+    res.redirect(url.replace(`${req.protocol}://${req.hostname}:8765/${req.params.path}`))
+  } else {
+    res.end();
+  }
 });
 
 
