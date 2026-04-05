@@ -377,14 +377,6 @@ app.get(opts.route, function (req, res) {
 // intended as admin panel behind umbrel login
 app.get(`${opts.admin}`, function (req, res) {
 
-  // sanity check domain name
-  const domain = req.get('host')
-  if (`https://${domain}` != opts.mattermost) {
-    console.log(`domain mismatch: https://${domain} vs ${opts.mattermost}`)
-    res.redirect(opts.mattermost)
-    return
-  }
-
   // tablulate results
   let users = undefined
   const getResults = () => {
