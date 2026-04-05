@@ -439,6 +439,12 @@ app.get(`${opts.admin}`, function (req, res) {
 })
 
 
+// handles ancillary files (styles, etc.) when serving for a local umbrel instance
+app.get('/:path*', (req, res) => {
+  res.redirect(url.replace(`${req.protocol}://${req.hostname}:8765/${req.params.path}`))
+});
+
+
 
 var http = require('http')
 const port = +opts.port
