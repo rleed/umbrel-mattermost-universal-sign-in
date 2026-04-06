@@ -51,6 +51,11 @@ const options = {
     short: 'M',
     default: 'https://mempool.space',
   },
+  team: {
+    type: 'string',
+    short: 'T',
+    default: 'welcome',
+  },
 }
 
 const { values: opts, positionals: args } = parseArgs({
@@ -165,14 +170,14 @@ function loginMattermost(res, id) {
                 }
               })
             }
-            // find welcome team
+            // find team
             if (!team_id) {
-              fetch(`${opts.mattermost}/api/v4/teams/name/welcome`, get_options).then(r => r.json()).then(json => {
-                if (json.name == 'welcome' && json.id) {
+              fetch(`${opts.mattermost}/api/v4/teams/name/${opts.team}`, get_options).then(r => r.json()).then(json => {
+                if (json.name == opts.team && json.id) {
                   team_id = json.id
                   addToTeam()
                 } else {
-                  reject(`error finding welcome team: ${JSON.stringify(json)}`)
+                  reject(`error finding team: ${JSON.stringify(json)}`)
                 }
               })
             } else {
