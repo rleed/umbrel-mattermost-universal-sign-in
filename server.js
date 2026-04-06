@@ -274,9 +274,10 @@ function verify(id, message, sig) {
 app.get(opts.route, function (req, res) {
 
   // sanity check domain name
+  const proto = req.protocol
   const domain = req.get('host')
-  if (`https://${domain}` != opts.mattermost) {
-    console.log(`domain mismatch: https://${domain} vs ${opts.mattermost}`)
+  if (`${proto}://${domain}` != opts.mattermost) {
+    console.log(`domain mismatch: ${proto}://${domain} vs ${opts.mattermost}`)
     res.redirect(opts.mattermost)
     return
   }
@@ -302,7 +303,7 @@ app.get(opts.route, function (req, res) {
       if (JSON.stringify(req.query) == '{}') {
         const absPath = path.join(__dirname, 'login-page.html')
         let content = fs.readFileSync(absPath, 'utf8')
-        content = content.replaceAll('{domain}', domain)
+        content = content.replaceAll('{base_url}', `${proto}://${domain}`)
         content = content.replaceAll('{message}', message)
         res.send(content)
         res.end()
@@ -382,6 +383,7 @@ app.get(opts.route, function (req, res) {
 // intended as admin panel behind umbrel login
 app.get(`${opts.admin}`, function (req, res) {
 
+  const proto = req.protocol
   const domain = req.get('host')
 
   // tablulate results
@@ -409,7 +411,7 @@ app.get(`${opts.admin}`, function (req, res) {
 
     const absPath = path.join(__dirname, 'admin-page.html')
     let content = fs.readFileSync(absPath, 'utf8')
-    content = content.replaceAll('{domain}', domain)
+    content = content.replaceAll('{base_url}', `${proto}://${domain}`)
     content = content.replaceAll('{table}', table)
     res.send(content)
     res.end()
