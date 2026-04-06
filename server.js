@@ -300,11 +300,12 @@ app.get(opts.route, function (req, res) {
       const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the then terms and policies.`
 
       // show modified login page
-      if (JSON.stringify(req.query) == '{}') {
-        const absPath = path.join(__dirname, 'login-page.html')
-        let content = fs.readFileSync(absPath, 'utf8')
+      if (JSON.stringify(Object.fromEntries(Object.entries(req.query).filter(([k]) => k !== 'signerror'))) == '{}') {
+        let content = fs.readFileSync(path.join(__dirname, 'login-page.html'), 'utf8')
+        let errorSlot = fs.readFileSync(path.join(__dirname, 'error-slot.html'), 'utf8')
         content = content.replaceAll('{base_url}', `${proto}://${domain}`)
         content = content.replaceAll('{message}', message)
+        content = content.replaceAll('{error_slot}', errorSlot.replaceAll('{message}', req.query.signerror))
         res.send(content)
         res.end()
       } else {
@@ -317,7 +318,7 @@ app.get(opts.route, function (req, res) {
           console.log(`failed login by ${loginId}`)
           console.log(`presented: ${loginMessage}`)
           console.log(`expected: ${message}`)
-          res.redirect(opts.route)
+          res.redirect(`${opts.route}?signerror=Login+message+expired:+try+again.`)
         } else {
           verify(loginId, loginMessage, loginSig).then(match => {
             console.log(`received ${match.scheme} by ${match.loginId}`)
@@ -329,7 +330,7 @@ app.get(opts.route, function (req, res) {
                 fetch(`${opts.mempool}/api/address/${loginId}/txs`).then(r => r.json()).then(json => {
                   txs = json
                   if (txs.length == 0) {
-                    reject('no history')
+                    reject('Bitcoin address not found on blockchain: use another.')
                   } else {
                     resolve()
                   }
@@ -353,7 +354,7 @@ app.get(opts.route, function (req, res) {
                 activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
               }).catch(e => {
                 console.log(`failed to login ${match.loginId}: ${e}`)
-                res.redirect(opts.route)
+                res.redirect(`${opts.route}?signerror=${encodeURIComponent('Unexpected error: please report date/time of incident to admin.')}`)
               })
             }).catch(e => {
               console.log(`blocked ${match.loginId}: ${e}`)
@@ -367,11 +368,11 @@ app.get(opts.route, function (req, res) {
                 sig: match.sig,
               })
               activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
-              res.redirect(opts.route)
+              res.redirect(`${opts.route}?signerror=${encodeURIComponent(e)}`)
             })
           }).catch(e => {
             console.log(`signature verification failed for ${loginId}: ${e}`)
-            res.redirect(opts.route)
+            res.redirect(`${opts.route}?signerror=${encodeURIComponent('Unrecognized signature: try signing with a different tool.')}`)
           })
         }
       }
@@ -448,12 +449,9 @@ app.get(`${opts.admin}`, function (req, res) {
 
 // handles ancillary files (styles, etc.) when serving for a local umbrel instance
 app.get('/:path*', (req, res) => {
-  console.log(`${req.protocol}://${req.get('host')}${req.originalUrl}`)
   if (req.get('host').endsWith(':8766')) {
-    console.log(`${req.protocol}://${req.hostname}:8765${req.originalUrl}`)
     res.redirect(`${req.protocol}://${req.hostname}:8765${req.originalUrl}`)
   } else {
-    console.log('(no redirect)')
     res.end();
   }
 });
