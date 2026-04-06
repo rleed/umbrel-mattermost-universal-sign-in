@@ -325,6 +325,7 @@ app.get(opts.route, function (req, res) {
             let screenUser = new Promise((resolve, reject) => {
               resolve()
             })
+/*
             if (match.scheme == 'Bitcoin Signed Message') {
               screenUser = new Promise((resolve, reject) => {
                 fetch(`${opts.mempool}/api/address/${loginId}/txs`).then(r => r.json()).then(json => {
@@ -337,6 +338,7 @@ app.get(opts.route, function (req, res) {
                 })
               })
             }
+*/
             screenUser.then(() => {
               loginMattermost(res, match.loginId).then(detail => {
                 console.log(`successful login by ${match.loginId}`)
