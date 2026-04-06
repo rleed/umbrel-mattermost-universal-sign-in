@@ -7,11 +7,21 @@ const bm = require('bitcoinjs-message')
 const bl = require('bitcoinjs-lib')
 const z32 = require('z32')
 
+import('lowdb/node').then(lowdb_node => {
+  JSONFile = lowdb_node.JSONFile
+import('lowdb').then(lowdb => {
+  Low = lowdb.Low
+
 const options = {
   port: {
     type: 'string',
     short: 'p',
     default: '8066',
+  },
+  datapath: {
+    type: 'string',
+    short: 'd',
+    default: '',
   },
   mattermost: {
     type: 'string',
@@ -31,6 +41,11 @@ const options = {
     short: 'r',
     default: '/sign-in'
   },
+  admin: {
+    type: 'string',
+    short: 'a',
+    default: '/'
+  },
   mempool: {
     type: 'string',
     short: 'M',
@@ -48,6 +63,15 @@ const { values: opts, positionals: args } = parseArgs({
   allowPositionals: true,
 })
 
+const adapter1 = new JSONFile(`${opts.datapath}users.json`)
+const db = new Low(adapter1, {})
+db.read()
+const adapter2 = new JSONFile(`${opts.datapath}activity.json`)
+const activity = new Low(adapter2, [])
+activity.read()
+
+let team_id = undefined
+
 var app = express()
 var app_options = {}
 
@@ -57,25 +81,26 @@ function base64ToBytes(base64) {
   return Uint8Array.from(binString, (m) => m.codePointAt(0));
 }
 
+const get_options = {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${opts.token}`,
+    'Accept': 'application/json'
+  }
+}
+const post_options = {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'X-Requested-With': 'XMLHttpRequest',
+    'Authorization': `Bearer ${opts.token}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+}
 
-function loginMattermost(res, domain, id) {
-  const get_options = {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${opts.token}`,
-      'Accept': 'application/json'
-    }
-  }
-  const post_options = {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'Authorization': `Bearer ${opts.token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    }
-  }
+
+function loginMattermost(res, id) {
   const injectSession = (username) => {
     return new Promise((resolve, reject) => {
       //console.log(`getting session token for ${username}`)
@@ -92,7 +117,7 @@ function loginMattermost(res, domain, id) {
             cookies[key] = value
           }
         }
-        //console.log(`injecting session cookies for ${username}`)
+        //console.log(`injecting session cookies for ${username}: ${JSON.stringify(cookies)}`)
         res.cookie('MMUSERID',    cookies['MMUSERID'],    { maxAge: 30*24*60*60*1000, secure: true })
         res.cookie('MMCSRF',      cookies['MMCSRF'],      { maxAge: 30*24*60*60*1000, secure: true })
         res.cookie('MMAUTHTOKEN', cookies['MMAUTHTOKEN'], { maxAge: 30*24*60*60*1000, secure: true })
@@ -112,9 +137,8 @@ function loginMattermost(res, domain, id) {
       a = a.split('').map(c => String.fromCharCode(c.charCodeAt(0) + (/\d/.test(c)? 97-48: 10))).join('')
       const shortcode = a
 
-    console.log(`${opts.mattermost}/api/v4/users/email/${shortcode}@satoshidnc.com`, JSON.stringify(get_options))
-    fetch(`${opts.mattermost}/api/v4/users/email/${shortcode}@satoshidnc.com`, get_options).then(r => r.json()).then(json => {
-      if (json.status_code == 404) {
+      let user_id = db.data[id]
+      if (!user_id) {
 
         // create new user
         console.log(`creating new user account ${shortcode}`)
@@ -125,45 +149,60 @@ function loginMattermost(res, domain, id) {
         })}).then(r => r.json()).then(json => {
           if (json.email == `${shortcode}@satoshidnc.com` && json.id) {
             user_id = json.id
-            // find team
-            fetch(`${opts.mattermost}/api/v4/teams/name/${opts.team}`, get_options).then(r => r.json()).then(json => {
-              if (json.name == opts.team && json.id) {
-                team_id = json.id
-                // add user to team
-                fetch(`${opts.mattermost}/api/v4/teams/${team_id}/members`, { ...post_options, body: JSON.stringify({
-                  team_id: team_id,
-                  user_id: user_id
-                })}).then(r => r.json()).then(json => {
-                  if (json.team_id == team_id && json.user_id == user_id) {
-                    // log in
-                    injectSession(shortcode).then(() => {
-                      console.log(`logged in ${shortcode}`)
-                      resolve()
+            db.data[id] = user_id
+            db.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
+
+            // add user to team
+            const addToTeam = () => {
+              fetch(`${opts.mattermost}/api/v4/teams/${team_id}/members`, { ...post_options, body: JSON.stringify({
+                team_id: team_id,
+                user_id: user_id
+              })}).then(r => r.json()).then(json => {
+                if (json.team_id == team_id && json.user_id == user_id) {
+                  // log in
+                  injectSession(shortcode).then(() => {
+                    resolve({
+                      id: user_id
                     })
-                  } else {
-                    reject(`error adding user to team: ${JSON.stringify(json)}`)
-                  }
-                })
-              } else {
-                reject(`error finding team: ${JSON.stringify(json)}`)
-              }
-            })
+                  })
+                } else {
+                  reject(`error adding user to team: ${JSON.stringify(json)}`)
+                }
+              })
+            }
+            // find team
+            if (!team_id) {
+              fetch(`${opts.mattermost}/api/v4/teams/name/${opts.team}`, get_options).then(r => r.json()).then(json => {
+                if (json.name == opts.team && json.id) {
+                  team_id = json.id
+                  addToTeam()
+                } else {
+                  reject(`error finding team: ${JSON.stringify(json)}`)
+                }
+              })
+            } else {
+              addToTeam()
+            }
           } else {
             reject(`error creating account ${shortcode}: ${JSON.stringify(json)}`)
           }
         })
 
-      } else if (json.email == `${shortcode}@satoshidnc.com` && json.id != '') {
-        injectSession(json.username).then(() => {
-          console.log(`logged in ${shortcode}`)
-          resolve()
-        })
       } else {
-        console.log(`error querying mattermost user ${shortcode}`)
-        reject(JSON.stringify(json))
-      }
-    }).catch(e => { reject(e) })
+        fetch(`${opts.mattermost}/api/v4/users/${user_id}`, get_options).then(r => r.json()).then(json => {
+          if (json.id == user_id) {
+            injectSession(json.username).then(() => {
+              resolve({
+                id: json.id
+              })
+            })
+          } else {
+            console.log(`error querying mattermost user ${user_id}`)
+            reject(JSON.stringify(json))
+          }
+        }).catch(e => { reject(e) })
 
+      }
     })
   })
 }
@@ -202,7 +241,9 @@ function verify(id, message, sig) {
       if (valid) {
         resolve({
           scheme: 'Lightning Signed Message',
-          loginId: pubkey
+          loginId: pubkey,
+          message,
+          sig
         })
       } else {
 
@@ -214,7 +255,9 @@ function verify(id, message, sig) {
         if (valid) {
           resolve({
             scheme: 'Bitcoin Signed Message',
-            loginId: id
+            loginId: id,
+            message,
+            sig
           })
         } else {
 
@@ -230,8 +273,15 @@ function verify(id, message, sig) {
 
 app.get(opts.route, function (req, res) {
 
-  // establish block time
+  // sanity check domain name
   const domain = req.get('host')
+  if (`https://${domain}` != opts.mattermost) {
+    console.log(`domain mismatch: https://${domain} vs ${opts.mattermost}`)
+    res.redirect(opts.mattermost)
+    return
+  }
+
+  // establish block time
   fetch(`${opts.mempool}/api/blocks/tip/hash`).then(r => r.text()).then(text => {
     const hash = text
     fetch(`${opts.mempool}/api/block/${hash}`).then(r => r.json()).then(block => {
@@ -286,15 +336,36 @@ app.get(opts.route, function (req, res) {
               })
             }
             screenUser.then(() => {
-              loginMattermost(res, domain, match.loginId).then(() => {
+              loginMattermost(res, match.loginId).then(detail => {
                 console.log(`successful login by ${match.loginId}`)
                 res.redirect('/')
+                activity.data.push({
+                  date: Date.now(),
+                  status: 'success',
+                  presented: loginId,
+                  scheme: match.scheme,
+                  id: match.loginId,
+                  message: match.message,
+                  sig: match.sig,
+                  user: detail.id
+                })
+                activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
               }).catch(e => {
                 console.log(`failed to login ${match.loginId}: ${e}`)
                 res.redirect(opts.route)
               })
             }).catch(e => {
               console.log(`blocked ${match.loginId}: ${e}`)
+              activity.data.push({
+                date: Date.now(),
+                status: 'blocked',
+                presented: loginId,
+                scheme: match.scheme,
+                id: match.loginId,
+                message: match.message,
+                sig: match.sig,
+              })
+              activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
               res.redirect(opts.route)
             })
           }).catch(e => {
@@ -308,8 +379,88 @@ app.get(opts.route, function (req, res) {
 })
 
 
+// intended as admin panel behind umbrel login
+app.get(`${opts.admin}`, function (req, res) {
+
+  const domain = req.get('host')
+
+  // tablulate results
+  let users = undefined
+  const getResults = () => {
+    let rows = Object.getOwnPropertyNames(db.data).map(id => {
+      const latest = activity.data.reduce((a,c) => {
+        if (c.id == id && c.status == 'success') {
+          if (a.scheme == '' || a.time < c.time) {
+            return c
+          } else {
+            return a
+          }
+        } else {
+          return a
+        }
+      }, { scheme: '', time: '' })
+      const u = users?.filter(u => u.id == db.data[id])[0]
+      const username = u?.username||'('+db.data[id]+')'
+      const firstlast = u? [u.last_name, u.first_name].filter(n => n).join(', '): ''
+      const displayname = u? (u.nickname+' '+(firstlast? '('+firstlast+')': '')).trim(): ''
+      return `<td>${username}</td><td>${displayname}</td><td>${latest.scheme.replace(' Signed Message','')}</td><td>${latest.presented||id}</td>`
+    })
+    let table = '<table class="guests"><tr><th>Username</th><th>Name</th><th>Auth</th><th>Identification</th></tr><tr>'+rows.join('</tr><tr>')+'</tr></table>'
+
+    const absPath = path.join(__dirname, 'admin-page.html')
+    let content = fs.readFileSync(absPath, 'utf8')
+    content = content.replaceAll('{domain}', domain)
+    content = content.replaceAll('{table}', table)
+    res.send(content)
+    res.end()
+  }
+
+  // get user details
+  const queryUsers = () => {
+    fetch(`${opts.mattermost}/api/v4/users?inactive&in_team=${team_id}`, get_options)
+    .then(r => r.json()).then(json => {
+      users = json
+      getResults()
+    }).catch(e => {
+      console.log(`user query failed: ${e}`)
+      getResults()
+    })
+  }
+
+  // find welcome team
+  if (!team_id) {
+    fetch(`${opts.mattermost}/api/v4/teams/name/welcome`, get_options).then(r => r.json()).then(json => {
+      if (json.name == 'welcome' && json.id) {
+        team_id = json.id
+        queryUsers()
+      } else {
+        console.log(`error finding welcome team: ${JSON.stringify(json)}`)
+        getResults()
+      }
+    })
+  } else {
+    queryUsers()
+  }
+})
+
+
+// handles ancillary files (styles, etc.) when serving for a local umbrel instance
+app.get('/:path*', (req, res) => {
+  if (req.get('host').endsWith(':8766')) {
+    res.redirect(url.replace(`${req.protocol}://${req.hostname}:8765/${req.params.path}`))
+  } else {
+    res.end();
+  }
+});
+
+
+
 var http = require('http')
 const port = +opts.port
 http.createServer(app_options, app).listen(port)
 console.log(`node ${process.version}`)
 console.log(`listening on port ${port}`)
+
+})
+})
+
