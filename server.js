@@ -276,8 +276,8 @@ app.get(opts.route, function (req, res) {
   // sanity check domain name
   const proto = req.protocol
   const domain = req.get('host')
-  if (`${proto}://${domain}` != opts.mattermost) {
-    console.log(`domain mismatch: ${proto}://${domain} vs ${opts.mattermost}`)
+  if (`https://${domain}` != opts.mattermost) {
+    console.log(`domain mismatch: https://${domain} vs ${opts.mattermost}`)
     res.redirect(opts.mattermost)
     return
   }
