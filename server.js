@@ -305,7 +305,7 @@ app.get(opts.route, function (req, res) {
         let errorSlot = fs.readFileSync(path.join(__dirname, 'error-slot.html'), 'utf8')
         content = content.replaceAll('{base_url}', `${proto}://${domain}`)
         content = content.replaceAll('{message}', message)
-        content = content.replaceAll('{error_slot}', errorSlot.replaceAll('{message}', req.query.signerror))
+        content = content.replaceAll('{error_slot}', (!req.query.signerror)?'':errorSlot.replaceAll('{message}', req.query.signerror))
         res.send(content)
         res.end()
       } else {
