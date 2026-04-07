@@ -297,7 +297,7 @@ app.get(opts.route, function (req, res) {
       const thb = ymdb % 6
       const tm = thb * 10
       const time = `${String(th).padStart(2,'0')}:${String(tm).padStart(2,'0')} ${String(ymd+1).padStart(2,'0')}/${String(ym+1).padStart(2,'0')}/${String(y+1).padStart(4,'0')} BTC`
-      const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the then terms and policies.`
+      const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the terms and policies then on file.`
 
       // show modified login page
       if (JSON.stringify(Object.fromEntries(Object.entries(req.query).filter(([k]) => k !== 'signerror'))) == '{}') {
@@ -374,7 +374,7 @@ app.get(opts.route, function (req, res) {
             })
           }).catch(e => {
             console.log(`signature verification failed for ${loginId}: ${e}`)
-            res.redirect(`${opts.route}?signerror=${encodeURIComponent('Unrecognized signature: try signing with a different tool.')}`)
+            res.redirect(`${opts.route}?signerror=${encodeURIComponent('Improperly signed: try again.')}`)
           })
         }
       }
