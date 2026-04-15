@@ -339,10 +339,18 @@ app.get(opts.route, function (req, res) {
       // show modified login page
       if (JSON.stringify(Object.fromEntries(Object.entries(req.query).filter(([k]) => k !== 'signerror'))) == '{}') {
         let content = fs.readFileSync(path.join(__dirname, 'login-page.html'), 'utf8')
-        let errorSlot = fs.readFileSync(path.join(__dirname, 'error-slot.html'), 'utf8')
+        let messageSnippet = fs.readFileSync(path.join(__dirname, 'error-snippet.html'), 'utf8')
         content = content.replaceAll('{base_url}', `${proto}://${domain}`)
         content = content.replaceAll('{message}', message)
-        content = content.replaceAll('{error_slot}', (!req.query.signerror)?'':errorSlot.replaceAll('{message}', req.query.signerror))
+        content = content.replaceAll('{error_slot}', (!req.query.signerror)?'':messageSnippet.replaceAll('{message}', req.query.signerror))
+        res.send(content)
+        res.end()
+      } else if (JSON.stringify(Object.fromEntries(Object.entries(req.query).filter(([k]) => k !== 'signinfo'))) == '{}') {
+        let content = fs.readFileSync(path.join(__dirname, 'login-page.html'), 'utf8')
+        let messageSnippet = fs.readFileSync(path.join(__dirname, 'info-snippet.html'), 'utf8')
+        content = content.replaceAll('{base_url}', `${proto}://${domain}`)
+        content = content.replaceAll('{message}', message)
+        content = content.replaceAll('{error_slot}', (!req.query.signinfo)?'':messageSnippet.replaceAll('{message}', req.query.signinfo))
         res.send(content)
         res.end()
       } else {
@@ -376,7 +384,7 @@ app.get(opts.route, function (req, res) {
               console.log(`terms changed for ${loginId}`)
               console.log(`old: ${prevTemplateFilled}`)
               console.log(`new: ${message}`)
-              res.redirect(`${opts.route}?signerror=The+terms+you+are+signing+are+not+the+same+as+when+you+last+signed+in.+Please+double+check+them+before+proceeding.`)
+              res.redirect(`${opts.route}?signinfo=The+terms+you+are+signing+are+not+the+same+as+when+you+last+signed+in.+Please+double+check+them+before+proceeding.`)
               activity.data.push({
                 date: Date.now(),
                 status: 'new-terms',
