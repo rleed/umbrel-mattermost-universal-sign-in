@@ -35,7 +35,7 @@ const options = {
   },
   password: {
     type: 'string',
-    short: 'w',
+    short: 'P',
   },
   route: {
     type: 'string',
