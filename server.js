@@ -49,13 +49,20 @@ const options = {
   },
   mempool: {
     type: 'string',
-    short: 'M',
+    short: 'm',
     default: 'https://mempool.space',
   },
   team: {
     type: 'string',
     short: 'w',
     default: 'welcome',
+  },
+  message: {
+    type: 'string',
+    short: 'M',
+    default: `\
+I, the undersigned, hereby access {domain} as of {blocktime} ({minihash}) \
+subject to the terms and policies on file.`
   },
   terms: {
     type: 'string',
@@ -329,7 +336,7 @@ app.get(opts.route, function (req, res) {
       const tm = thb * 10
       const blocktime = `${String(th).padStart(2,'0')}:${String(tm).padStart(2,'0')} ${String(ymd+1).padStart(2,'0')}/${String(ym+1).padStart(2,'0')}/${String(y+1).padStart(4,'0')} BTC`
       const minihash = hash.slice(-4)
-      const template = opts.terms
+      const template = opts.message
       const message = template
         .replaceAll('{domain}', domain)
         .replaceAll('{blocktime}', blocktime)
