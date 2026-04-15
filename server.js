@@ -63,7 +63,7 @@ const options = {
     default: `\
 I, the undersigned, pledge to the members of the {domain} community never \
 to report nor reveal their personal data including transaction data without \
-a legal warrant, and I agree to the terms and policies on file. Date: {blocktime} ({minihash})`
+a search warrant, and I agree to the terms and policies on file. Date: {blocktime} ({minihash})`
   },
 }
 
@@ -384,7 +384,7 @@ app.get(opts.route, function (req, res) {
               console.log(`terms changed for ${loginId}`)
               console.log(`old: ${prevTemplateFilled}`)
               console.log(`new: ${message}`)
-              res.redirect(`${opts.route}?signinfo=The+terms+you+are+signing+are+not+the+same+as+when+you+last+signed+in.+Please+double+check+them+before+proceeding.`)
+              res.redirect(`${opts.route}?signinfo=The+sign-in+message+has+changed+since+you+last+signed+in.+Please+re-read+it+carefully+before+proceeding.`)
               activity.data.push({
                 date: Date.now(),
                 status: 'new-terms',
