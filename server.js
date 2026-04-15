@@ -62,7 +62,7 @@ const options = {
     short: 'M',
     default: `\
 I, the undersigned, hereby access {domain} as of {blocktime} ({minihash}) \
-subject to the terms and policies on file.`
+subject to the terms and policies.`
   },
   terms: {
     type: 'string',
@@ -387,7 +387,7 @@ app.get(opts.route, function (req, res) {
               .replaceAll('{domain}', domain)
               .replaceAll('{blocktime}', blocktime)
               .replaceAll('{minihash}', minihash)
-            if (prevTemplateFilled != message) {
+            if (false) { // if (prevTemplateFilled != message) {
               console.log(`terms changed for ${loginId}`)
               console.log(`old: ${prevTemplateFilled}`)
               console.log(`new: ${message}`)
