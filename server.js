@@ -6,6 +6,7 @@ const { exec } = require("child_process")
 const bm = require('bitcoinjs-message')
 const bl = require('bitcoinjs-lib')
 const z32 = require('z32')
+const qrlib = require('qrcode')
 
 import('lowdb/node').then(lowdb_node => {
   JSONFile = lowdb_node.JSONFile
@@ -53,8 +54,16 @@ const options = {
   },
   team: {
     type: 'string',
-    short: 'T',
+    short: 'w',
     default: 'welcome',
+  },
+  terms: {
+    type: 'string',
+    short: 'T',
+    default: `\
+I, the undersigned, pledge to the members of the {domain} community never \
+to report nor reveal their personal data including transaction data without \
+a legal warrant, and I agree to the terms and policies on file. Date: {blocktime} ({minihash})`
   },
 }
 
@@ -80,6 +89,21 @@ function base64ToBytes(base64) {
   const binString = Buffer.from(base64, 'base64').toString('utf8');
   return Uint8Array.from(binString, (m) => m.codePointAt(0));
 }
+
+app.get(`${opts.route}/qr`, (req, res) => {
+  const text = req.query.text || 'Hello World'
+  try {
+    qrlib.toDataURL(text).then(qrDataUrl => {
+      res.send(`<img src="${qrDataUrl}" alt="QR Code">`)
+    }).catch(e => {
+      console.log(`error generating data URL: ${e}`)
+      res.status(500).end()
+    })
+  } catch (e) {
+    console.log(`error generating QR code: ${e}`)
+    res.status(500).end()
+  }
+})
 
 const get_options = {
   method: 'GET',
@@ -284,7 +308,14 @@ app.get(opts.route, function (req, res) {
 
   // establish block time
   fetch(`${opts.mempool}/api/blocks/tip/hash`).then(r => r.text()).then(text => {
+
     const hash = text
+    if (!/[0-9a-f]/.test(hash)) {
+      console.log(`error getting block tip: ${text}`)
+      res.status(503).send('The mempool service is unavailable: please inform the administrator.')
+      return
+    }
+
     fetch(`${opts.mempool}/api/block/${hash}`).then(r => r.json()).then(block => {
       const b = block.height
       const y = Math.floor(b / 52500)
@@ -296,8 +327,14 @@ app.get(opts.route, function (req, res) {
       const th = Math.floor(ymdb / 6)
       const thb = ymdb % 6
       const tm = thb * 10
-      const time = `${String(th).padStart(2,'0')}:${String(tm).padStart(2,'0')} ${String(ymd+1).padStart(2,'0')}/${String(ym+1).padStart(2,'0')}/${String(y+1).padStart(4,'0')} BTC`
-      const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the terms and policies then on file.`
+      const blocktime = `${String(th).padStart(2,'0')}:${String(tm).padStart(2,'0')} ${String(ymd+1).padStart(2,'0')}/${String(ym+1).padStart(2,'0')}/${String(y+1).padStart(4,'0')} BTC`
+      const minihash = hash.slice(-4)
+      const template = opts.terms
+      const message = template
+        .replaceAll('{domain}', domain)
+        .replaceAll('{blocktime}', blocktime)
+        .replaceAll('{minihash}', minihash)
+      //const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the terms and policies then on file.`
 
       // show modified login page
       if (JSON.stringify(Object.fromEntries(Object.entries(req.query).filter(([k]) => k !== 'signerror'))) == '{}') {
@@ -322,6 +359,36 @@ app.get(opts.route, function (req, res) {
         } else {
           verify(loginId, loginMessage, loginSig).then(match => {
             console.log(`received ${match.scheme} by ${match.loginId}`)
+            const date_now = Date.now()
+            const prevTemplate = activity.data.reduce((a, c) => {
+              let age = date_now - c.date
+              if (['success', 'new-terms'].includes(c.status) && !isNaN(c.date) && c.template && (!a.age || age < a.age)) {
+                return { age, template: c.template }
+              } else {
+                return a
+              }
+            }, { age: 0, template: '' }).template
+            const prevTemplateFilled = prevTemplate
+              .replaceAll('{domain}', domain)
+              .replaceAll('{blocktime}', blocktime)
+              .replaceAll('{minihash}', minihash)
+            if (prevTemplateFilled != message) {
+              console.log(`terms changed for ${loginId}`)
+              console.log(`old: ${prevTemplateFilled}`)
+              console.log(`new: ${message}`)
+              res.redirect(`${opts.route}?signerror=The+terms+you+are+signing+are+not+the+same+as+when+you+last+signed+in.+Please+double+check+them+before+proceeding.`)
+              activity.data.push({
+                date: Date.now(),
+                status: 'new-terms',
+                presented: loginId,
+                scheme: match.scheme,
+                id: match.loginId,
+                message: match.message,
+                template: template,
+                sig: match.sig
+              })
+              activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
+            } else {
             let screenUser = new Promise((resolve, reject) => {
               resolve()
             })
@@ -350,6 +417,7 @@ app.get(opts.route, function (req, res) {
                   scheme: match.scheme,
                   id: match.loginId,
                   message: match.message,
+                  template: template,
                   sig: match.sig,
                   user: detail.id
                 })
@@ -367,11 +435,13 @@ app.get(opts.route, function (req, res) {
                 scheme: match.scheme,
                 id: match.loginId,
                 message: match.message,
+                template: template,
                 sig: match.sig,
               })
               activity.write().then(()=>{}).catch(e => console.log(`error writing db: ${e}`))
               res.redirect(`${opts.route}?signerror=${encodeURIComponent(e)}`)
             })
+            }
           }).catch(e => {
             console.log(`signature verification failed for ${loginId}: ${e}`)
             res.redirect(`${opts.route}?signerror=${encodeURIComponent('Improperly signed: try again.')}`)
