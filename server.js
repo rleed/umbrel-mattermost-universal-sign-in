@@ -7,6 +7,7 @@ const bm = require('bitcoinjs-message')
 const bl = require('bitcoinjs-lib')
 const z32 = require('z32')
 const qrlib = require('qrcode')
+const { Verifier } = require('bip322-js')
 
 import('lowdb/node').then(lowdb_node => {
   JSONFile = lowdb_node.JSONFile
@@ -292,8 +293,20 @@ function verify(id, message, sig) {
           })
         } else {
 
-          // all attempts failed
-          reject('not valid according to any supported signature scheme')
+          // check for BIP-322 signed message
+          const valid = Verifier.verifySignature(id, message, sig)
+          if (valid) {
+            resolve({
+              scheme: 'BIP-322 Signed Message',
+              loginId: id,
+              message,
+              sig
+            })
+          } else {
+
+            // all attempts failed
+            reject('not valid according to any supported signature scheme')
+          }
         }
       }
     })
