@@ -8,11 +8,15 @@ const bl = require('bitcoinjs-lib')
 const z32 = require('z32')
 const qrlib = require('qrcode')
 const { Verifier } = require('bip322-js')
+const { bech32 } = require('bech32')
+const { schnorr } = require('@noble/curves/secp256k1')
 
 import('lowdb/node').then(lowdb_node => {
   JSONFile = lowdb_node.JSONFile
 import('lowdb').then(lowdb => {
   Low = lowdb.Low
+import('@nostr/tools/pure').then(nostr_tools_pure => {
+  const { getEventHash } = nostr_tools_pure
 
 const options = {
   port: {
@@ -240,6 +244,49 @@ function loginMattermost(res, id) {
 }
 
 
+function verifyNostorEvent(npub, messageString, sig, ...aux) {
+//console.log('args:', npub, messageString, sig, aux)
+  return new Promise((resolve, reject) => {
+    try {
+      const decoded = bech32.decode(npub)
+      if (!decoded || decoded.prefix != 'npub') {
+        resolve(false)
+        return
+      }
+      const bytes = bech32.fromWords(decoded.words)
+      let pubkey
+      if (bytes.length == 32 && bytes.reduce((a,c) => a && c>=0 && c<256, true)) {
+        pubkey = bytes.map(x => (x.toString(16)).padStart(2,'0')).join('')
+      } else {
+        resolve(false)
+        return
+      }
+
+      const event = {
+        pubkey: `${pubkey}`,
+        created_at: +aux[4],
+        kind: 1,
+        tags: [
+        ],
+        content: `${messageString}`
+      }
+//console.log('event', JSON.stringify(event))
+      const hexToBytes = hex => new Uint8Array(hex.split(/(?=(?:..)*$)/).map(e => parseInt(e, 16)))
+      const id = getEventHash(event)
+      const valid = schnorr.verify(
+        hexToBytes(sig),
+        hexToBytes(id),
+        hexToBytes(pubkey))
+      resolve(valid)
+      return
+    } catch(e) {
+      resolve(false)
+      return
+    }
+  })
+}
+
+
 function verifyLightningMessage(pubkeyHex, messageString, zbase32Signature) {
   return new Promise((resolve, reject) => {
     import('@noble/secp256k1').then(secp => {
@@ -260,7 +307,7 @@ function verifyLightningMessage(pubkeyHex, messageString, zbase32Signature) {
 }
 
 
-function verify(id, message, sig) {
+function verify(id, message, sig, ...aux) {
   return new Promise((resolve, reject) => {
 
     // check for valid lightning signed message
@@ -294,7 +341,10 @@ function verify(id, message, sig) {
         } else {
 
           // check for BIP-322 signed message
-          const valid = Verifier.verifySignature(id, message, sig)
+          try {
+            valid = Verifier.verifySignature(id, message, sig)
+          } catch(e) {
+          }
           if (valid) {
             resolve({
               scheme: 'BIP-322 Signed Message',
@@ -304,8 +354,22 @@ function verify(id, message, sig) {
             })
           } else {
 
-            // all attempts failed
-            reject('not valid according to any supported signature scheme')
+            // check for Nostor signed event
+            verifyNostorEvent(id, message, sig, ...aux).then(valid => {
+              if (valid) {
+                resolve({
+                  scheme: 'Nostor Signed Message',
+                  loginId: id,
+                  message,
+                  sig
+                })
+              } else {
+
+                // all attempts failed
+                reject('not valid according to any supported signature scheme')
+
+              }
+            })
           }
         }
       }
@@ -354,6 +418,7 @@ app.get(opts.route, function (req, res) {
         .replaceAll('{domain}', domain)
         .replaceAll('{blocktime}', blocktime)
         .replaceAll('{minihash}', minihash)
+      const timestamp = block.timestamp
       //const message = `I hereby request access to ${domain} at ${time} (${hash.slice(-4)}) subject to the terms and policies then on file.`
 
       // show modified login page
@@ -385,7 +450,9 @@ app.get(opts.route, function (req, res) {
           console.log(`expected: ${message}`)
           res.redirect(`${opts.route}?signerror=Login+message+expired:+try+again.`)
         } else {
-          verify(loginId, loginMessage, loginSig).then(match => {
+          verify(loginId, loginMessage, loginSig,
+            template, domain, blocktime, minihash, timestamp
+          ).then(match => {
             console.log(`received ${match.scheme} by ${match.loginId}`)
             const date_now = Date.now()
             const prevTemplate = activity.data.reduce((a, c) => {
@@ -566,4 +633,4 @@ console.log(`listening on port ${port}`)
 
 })
 })
-
+})
